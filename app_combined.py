@@ -92,28 +92,45 @@ def load_system(system_type):
     """Load all models for selected system"""
     try:
         models = {}
-        model_dir = f"models/{system_type}"
+        model_dir = f"models/{system_type.lower()}"
+        
+        # Check if directory exists
+        if not os.path.exists(model_dir):
+            st.write(f"DEBUG: Directory not found: {model_dir}")
+            return {}, {}, {}
         
         # Regression models
         for fname in os.listdir(model_dir):
             if '_reg.pkl' in fname and fname != 'scaler_regression.pkl':
                 model_name = fname.replace('_reg.pkl', '').replace('_', ' ').title()
-                models[model_name] = joblib.load(f"{model_dir}/{fname}")
+                try:
+                    models[model_name] = joblib.load(f"{model_dir}/{fname}")
+                except Exception as e:
+                    st.write(f"DEBUG: Error loading {fname}: {str(e)}")
         
         # Scalers and encoders
-        scalers = {
-            'regression': joblib.load(f"{model_dir}/scaler_regression.pkl"),
-            'classification': joblib.load(f"{model_dir}/scaler_classification.pkl")
-        }
+        try:
+            scalers = {
+                'regression': joblib.load(f"{model_dir}/scaler_regression.pkl"),
+                'classification': joblib.load(f"{model_dir}/scaler_classification.pkl")
+            }
+        except Exception as e:
+            st.write(f"DEBUG: Error loading scalers: {str(e)}")
+            return models, {}, {}
         
-        encoders = {
-            'label_encoder': joblib.load(f"{model_dir}/label_encoder.pkl"),
-            'feature_names': joblib.load(f"{model_dir}/feature_names.pkl"),
-            'class_names': joblib.load(f"{model_dir}/class_names.pkl")
-        }
+        try:
+            encoders = {
+                'label_encoder': joblib.load(f"{model_dir}/label_encoder.pkl"),
+                'feature_names': joblib.load(f"{model_dir}/feature_names.pkl"),
+                'class_names': joblib.load(f"{model_dir}/class_names.pkl")
+            }
+        except Exception as e:
+            st.write(f"DEBUG: Error loading encoders: {str(e)}")
+            return models, scalers, {}
         
         return models, scalers, encoders
     except Exception as e:
+        st.write(f"DEBUG: General error in load_system: {str(e)}")
         return {}, {}, {}
 
 # ============================================================================
@@ -208,10 +225,14 @@ def main():
     with col1:
         if st.button("🐟 Aquaculture (AWQI)", use_container_width=True, key="btn_aqua"):
             st.session_state.system = "Aquaculture"
+            st.cache_resource.clear()
+            st.rerun()
     
     with col2:
         if st.button("🐄 Livestock (LWQI)", use_container_width=True, key="btn_live"):
             st.session_state.system = "Livestock"
+            st.cache_resource.clear()
+            st.rerun()
     
     if "system" not in st.session_state:
         st.session_state.system = "Aquaculture"
@@ -227,7 +248,7 @@ def main():
     st.sidebar.title("🎯 Navigation")
     page = st.sidebar.radio(
         "Select page:",
-        ["📊 Prediction Dashboard", "📚 Parameter Guide", "📈 Model Performance", "ℹ️ About"]
+        ["📊 Prediction Dashboard", "📚 Parameter Guide", "📈 Model Performance", "🐛 System Debug", "ℹ️ About"]
     )
     
     # ========================================================================
@@ -399,6 +420,71 @@ def main():
         st.subheader(f"{st.session_state.system} System - Model Comparison")
         st.write("✅ All models trained and optimized for best performance")
         st.info(f"Currently showing {st.session_state.system} models. Switch systems to see comparison.")
+    
+    # ========================================================================
+    # PAGE: SYSTEM DEBUG
+    # ========================================================================
+    elif page == "🐛 System Debug":
+        st.header("System Diagnostics")
+        
+        st.subheader("📁 Directory Structure")
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.write("**Aquaculture Models:**")
+            aqua_path = "models/aquaculture"
+            if os.path.exists(aqua_path):
+                aqua_files = os.listdir(aqua_path)
+                st.success(f"✅ Found {len(aqua_files)} files")
+                with st.expander("View files"):
+                    for f in sorted(aqua_files):
+                        st.text(f)
+            else:
+                st.error(f"❌ Directory not found: {aqua_path}")
+        
+        with col2:
+            st.write("**Livestock Models:**")
+            live_path = "models/livestock"
+            if os.path.exists(live_path):
+                live_files = os.listdir(live_path)
+                st.success(f"✅ Found {len(live_files)} files")
+                with st.expander("View files"):
+                    for f in sorted(live_files):
+                        st.text(f)
+            else:
+                st.error(f"❌ Directory not found: {live_path}")
+        
+        st.subheader("🔧 Model Loading Test")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.write("**Testing Aquaculture System:**")
+            aqua_models, aqua_scalers, aqua_encoders = load_system("Aquaculture")
+            if aqua_models and aqua_scalers and aqua_encoders:
+                st.success("✅ Aquaculture system loaded successfully")
+                st.text(f"Models loaded: {len(aqua_models)}")
+                st.text(f"Feature count: {len(aqua_encoders.get('feature_names', []))}")
+            else:
+                st.error("❌ Failed to load Aquaculture system")
+                st.text(f"Models: {len(aqua_models)}, Scalers: {len(aqua_scalers)}, Encoders: {len(aqua_encoders)}")
+        
+        with col2:
+            st.write("**Testing Livestock System:**")
+            live_models, live_scalers, live_encoders = load_system("Livestock")
+            if live_models and live_scalers and live_encoders:
+                st.success("✅ Livestock system loaded successfully")
+                st.text(f"Models loaded: {len(live_models)}")
+                st.text(f"Feature count: {len(live_encoders.get('feature_names', []))}")
+            else:
+                st.error("❌ Failed to load Livestock system")
+                st.text(f"Models: {len(live_models)}, Scalers: {len(live_scalers)}, Encoders: {len(live_encoders)}")
+        
+        st.subheader("📊 Environment Info")
+        st.text(f"Current working directory: {os.getcwd()}")
+        import sys
+        st.text(f"Python version: {sys.version}")
+        st.text(f"Cache key (system): {st.session_state.get('system', 'Not set')}")
     
     # ========================================================================
     # PAGE: ABOUT
